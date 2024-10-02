@@ -10,8 +10,9 @@
 
 Include related issue links attached to this PR.
 
-- Fixes AW-10
-- Closes AW-52 
+- Closes [FRS-<ISSUE_KEY>](https://defined0101.atlassian.net/browse/FRS-<ISSUE_KEY>)
+- Fixes [FRS-<ISSUE_KEY>](https://defined0101.atlassian.net/browse/FRS-<ISSUE_KEY>)
+- Partly Closes [FRS-<ISSUE_KEY>](https://defined0101.atlassian.net/browse/FRS-<ISSUE_KEY>)
 
 ## Type of change
 
