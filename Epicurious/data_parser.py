@@ -195,8 +195,6 @@ def process_recipes(data):
         calories = recipe.get('calories')
         fat = recipe.get('fat')
         protein = recipe.get('protein')
-        sodium = recipe.get('sodium')
-        rating = recipe.get('rating')
         desc = recipe.get('desc')
 
         if desc:
@@ -230,8 +228,6 @@ def process_recipes(data):
             'calories': calories,
             'fat': fat,
             'protein': protein,
-            'sodium': sodium,
-            'rating': rating,
             'desc': desc
         })
 
