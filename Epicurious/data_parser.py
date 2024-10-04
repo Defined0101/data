@@ -8,7 +8,6 @@ from pyparsing import (
 
 def normalize_text(text):
     text = unicodedata.normalize('NFKD', text)
-    # Replace common Unicode fraction characters with their numeric equivalents
     fractions = {
         '½': '1/2',
         '⅓': '1/3',
@@ -22,7 +21,7 @@ def normalize_text(text):
     }
     for unicode_frac, replacement in fractions.items():
         text = text.replace(unicode_frac, replacement)
-    # Replace Unicode fraction slash with standard slash
+
     text = text.replace('⁄', '/')
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
@@ -31,15 +30,12 @@ def normalize_text(text):
 def parse_ingredient(ingredient):
     ingredient = normalize_text(ingredient)
 
-    # Define fractional and mixed number patterns
     fraction = Combine(Word(nums) + '/' + Word(nums))
     mixed_num = Combine(Word(nums) + Suppress(White()) + fraction)
 
-    # Define quantity pattern
     quantity = (mixed_num | fraction | Word(
         nums + '.')).setResultsName('quantity')
 
-    # Define units list
     units_list = [
         'teaspoon', 'teaspoons', 'tsp',
         'tablespoon', 'tablespoons', 'tbsp',
@@ -81,62 +77,48 @@ def parse_ingredient(ingredient):
         'inch', 'inches',
     ]
 
-    # Define unit pattern with whole word matching and case insensitivity
     unit = oneOf(units_list, caseless=True,
                  asKeyword=True).setResultsName('unit')
 
-    # Define ingredient name pattern
     ingredient_name = restOfLine.setResultsName('ingredient_name')
 
-    # Define parser for quantity + unit + ingredient
     with_quantity_unit = (
         quantity + unit + Suppress(White()) + ingredient_name)
 
-    # Define parser for quantity + ingredient (without unit)
     with_quantity_only = (quantity + Suppress(White()) + ingredient_name)
 
-    # Define parser for ingredient only (no quantity or unit)
     without_quantity_unit = ingredient_name
 
-    # Combine parsers: try with quantity and unit first, then with quantity only, then ingredient only
     ingredient_parser = with_quantity_unit | with_quantity_only | without_quantity_unit
 
     try:
         parsed = ingredient_parser.parseString(ingredient)
 
-        # Initialize variables
         quantity_value = None
         unit_parsed = None
         ingredient_name_parsed = ''
 
-        # Check which elements were parsed
         if 'unit' in parsed:
-            # Quantity and Unit are present
+
             quantity_parsed = parsed.get('quantity', None)
             unit_parsed = parsed.get('unit', None)
             ingredient_name_parsed = parsed.get('ingredient_name', '').strip()
         elif 'quantity' in parsed:
-            # Only Quantity is present
             quantity_parsed = parsed.get('quantity', None)
             ingredient_name_parsed = parsed.get('ingredient_name', '').strip()
         else:
-            # Only Ingredient Name is present
             ingredient_name_parsed = parsed.get('ingredient_name', '').strip()
 
-        # Convert quantity to float
         if 'quantity_parsed' in locals() and quantity_parsed:
             quantity_str = quantity_parsed
             if ' ' in quantity_str:
-                # Mixed number (e.g., '1 1/2')
                 whole, frac = quantity_str.split(' ')
                 num, denom = frac.split('/')
                 quantity_value = float(whole) + float(num) / float(denom)
             elif '/' in quantity_str:
-                # Fraction (e.g., '3/4')
                 num, denom = quantity_str.split('/')
                 quantity_value = float(num) / float(denom)
             else:
-                # Integer or decimal
                 quantity_value = float(quantity_str)
         else:
             quantity_value = None
@@ -147,7 +129,6 @@ def parse_ingredient(ingredient):
             'ingredient': ingredient_name_parsed
         }
     except ParseException as pe:
-        # If parsing fails, return the original text
         print(f"ParseException: {pe} for ingredient: {ingredient}")
         return {
             'quantity': None,
@@ -168,7 +149,7 @@ def extract_total_time(directions):
                 amount *= 60
             total_minutes += amount
     if total_minutes > 0:
-        return total_minutes
+        return int(total_minutes)
     else:
         return None
 
@@ -235,14 +216,11 @@ def process_recipes(data):
 
 
 def main():
-    # JSON verisini yükle
+
     with open('/Users/ilkeryasincakir/VsCodeProjects/GradProject/data/Epicurious/full_format_recipes.json', 'r', encoding='utf-8') as file:
         data = json.load(file)
 
-    # Tarifleri işle
     recipes = process_recipes(data)
-
-    # Sonuçları JSON olarak kaydet
     with open('Epicurious/recipes_output.json', 'w', encoding='utf-8') as f:
         json.dump(recipes, f, ensure_ascii=False, indent=4)
 
