@@ -28,6 +28,8 @@ def reader_main():
     # Initialize a list to store data temporarily before converting to a DataFrame
     temp_data = []
 
+    counter = 0
+
     # Open the JSON file containing the recipes data
     with open(os.path.join(path_of_the_current_scripts_dir, 'recipes_with_nutritional_info.json'), 'r') as file:
         # Use ijson to parse the file incrementally (streaming parsing)
@@ -35,6 +37,7 @@ def reader_main():
 
         # Loop through each entry in the parsed JSON
         for i, entry in enumerate(parser):
+            counter += 1
             # Process individual fields in the JSON entry
             ing = process_fields(entry['ingredients'])  # Get the list of ingredients
             ins = process_fields(entry['instructions'])  # Get the list of instructions
@@ -62,7 +65,7 @@ def reader_main():
                 recipes_chunk = pd.DataFrame(temp_data)
 
                 # Save the current chunk of the DataFrame to a CSV file
-                recipes_chunk.to_csv(os.path.join(path_of_the_current_scripts_dir, 'partitioned_data', f'recipes_{int((i + 1) / chunk_size)}.csv'), index=False)
+                recipes_chunk.to_csv(os.path.join(path_of_the_current_scripts_dir, 'partitioned_data', f'recipes_{int((i) / chunk_size)}.csv'), index=False)
 
                 # Clear the temp_data list and perform garbage collection to free up memory
                 temp_data.clear()
@@ -74,14 +77,17 @@ def reader_main():
             recipes_chunk = pd.DataFrame(temp_data)
 
             # Save to CSV
-            recipes_chunk.to_csv(os.path.join(path_of_the_current_scripts_dir, 'partitioned_data', f'recipes_{int((i + 2) / chunk_size)}.csv'), index=False)
+            recipes_chunk.to_csv(os.path.join(path_of_the_current_scripts_dir, 'partitioned_data', f'recipes_{int((i + 1) / chunk_size)}.csv'), index=False)
             
             # Clear the temp_data list and perform garbage collection
             temp_data.clear()
             gc.collect()
+    
+    return counter
 
 if __name__ == "__main__":
     import time
     start_time = time.time()
-    reader_main()  # Execute the main function when the script is run
+    count = reader_main()  # Execute the main function when the script is run
     print(f"Processing completed in {time.time() - start_time:.2f} seconds")
+    print(f"{count} recipes have been read")
