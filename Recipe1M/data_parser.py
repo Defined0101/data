@@ -6,159 +6,215 @@ import ast
 import unicodedata
 import os
 from fractions import Fraction
+import json
 
-# Initialize an empty list to store ingredients in a sorted order
+# Initialize global lists and sets
 sorted_ing_list = []
+sorted_unit_list = []
+unique_ing_set = set()  # To track unique ingredient entries for quick lookup
+unique_unit_set = set()  # To track unique units for quick lookup
 
-def append_sorted(element):
+def append_sorted(ing, unit, calories):
     """
-    Insert the ingredient element into the sorted_ing_list in a sorted manner based on the first two parts of the string.
+    Insert the ingredient element into sorted_ing_list and sorted_unit_list in a sorted manner using binary search.
     """
-    # Convert the element to string to ensure uniformity
-    element = str(element)
+    element = f'{ing}|{unit}|{calories}'
+    comparing_element = f'{ing}|{unit}'
+
+    # Use the set to check for uniqueness first
+    if comparing_element not in unique_ing_set:
+        # Use binary search to find the insertion point
+        index_ing = bisect.bisect_left(sorted_ing_list, comparing_element)
+        
+        # Append the ingredient if it's not already in the sorted list
+        sorted_ing_list.insert(index_ing, element)
+        unique_ing_set.add(comparing_element)  # Add to the set to ensure uniqueness
     
-    # Extract the first two components of the ingredient string for comparison (e.g., "ingredient-unit")
-    comparing_element = '-'.join(element.split('-')[:2])
-    
-    # Find the correct insertion index in the sorted list using binary search (for efficiency)
-    index = bisect.bisect_left(sorted_ing_list, comparing_element)
-    
-    # Check if the element is already in the list based on the first two components
-    if index < len(sorted_ing_list) and '-'.join(sorted_ing_list[index].split('-')[:2]) == comparing_element:
-        return  # If the element already exists, do not add it again
-    
-    # Insert the element into the sorted list at the correct position
-    sorted_ing_list.insert(index, element)
+    # Append the unit if it's not already in the sorted list
+    if unit not in unique_unit_set:
+        index_unit = bisect.bisect_left(sorted_unit_list, unit)
+        sorted_unit_list.insert(index_unit, unit)
+        unique_unit_set.add(unit)  # Add to the set to ensure uniqueness
 
 def parse_fraction(fraction_str):
     """
-    Converts a fraction (string) to a float. Handles both whole numbers, fractions, and mixed fractions.
+    Convert a fraction or mixed fraction string to a float. Handle cases like "1/2" or "5 1/2".
     """
     try:
-        # If it's already a float or integer, return it as a float
         if isinstance(fraction_str, (float, int)):
             return float(fraction_str)
 
-        # Handle mixed fractions like "5 1/2"
-        if ' ' in fraction_str:
+        if ' ' in fraction_str:  # Handle mixed fractions like "5 1/2"
             whole_number, fraction_part = fraction_str.split()
             return float(int(whole_number) + Fraction(fraction_part))
-        else:
-            # Handle simple fractions like "1/2"
-            return float(Fraction(fraction_str))
-
-    except ValueError:
-        # If conversion to a float fails, try to return it as a simple float
-        try:
-            return float(fraction_str)
-        except (ValueError, TypeError):
-            return None  # Return None for invalid inputs
+        return float(Fraction(fraction_str))  # Handle simple fractions like "1/2"
+    
+    except (ValueError, TypeError):
+        return None  # Return None if input is invalid
 
 def normalize_text(text):
     """
-    Normalize text to remove any special characters, excessive spaces, and convert to a standard form.
+    Normalize text by removing special characters and excessive spaces.
     """
-    # Normalize text using Unicode Normalization Form KD (NFKD)
     text = unicodedata.normalize('NFKD', text)
-    # Replace multiple spaces with a single space and trim the text
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
+    return re.sub(r'\s+', ' ', text).strip()
 
 def extract_total_time(directions):
     """
-    Extracts the total time from the recipe instructions, which can include both minutes and hours.
+    Extract the total time from the recipe instructions (in minutes).
     """
-    total_minutes = 0  # Initialize total time in minutes
-    
-    # Loop through each step in the directions
+    total_minutes = 0
     for step in directions:
-        step = normalize_text(step)  # Normalize the step text
-        
-        # Use regex to find time expressions (e.g., "10 minutes", "2 hours")
+        step = normalize_text(step)
         matches = re.findall(r'(\d+)\s*(minutes?|hours?)', step, flags=re.IGNORECASE)
         
-        # Convert time expressions into minutes
         for amount, unit in matches:
             amount = int(amount)
             if 'hour' in unit.lower():
                 amount *= 60  # Convert hours to minutes
             total_minutes += amount
-    
-    return int(total_minutes) if total_minutes > 0 else None  # Return total minutes or None if no time was found
 
-def ing_parser(row):
+    return total_minutes if total_minutes > 0 else None
+
+def ing_parser(ingredients, units, quantities, nutr_info):
     """
-    Parses the ingredients, units, quantities, and nutrition information from a recipe row.
-    Each ingredient's calories per unit is calculated and stored.
+    Parse ingredients, units, and quantities from a row, and calculate calories per unit.
     """
-    # Convert the 'Ingredients' column (a string representation of a list) into a Python list
-    evaluatedIngList = ast.literal_eval(row['Ingredients'])
-    
-    # Assuming 'unit', 'quantity', and 'nutr_per_ingredient' are columns with lists of corresponding values
-    for index, ing in enumerate(evaluatedIngList):
-        ing = ing.split(', ')[0]  # Extract the main ingredient name by splitting on commas
-        unit = ast.literal_eval(row['unit'])[index]  # Extract the unit
-        
-        # Parse the quantity, but handle invalid or None values
-        quantity_raw = ast.literal_eval(row['quantity'])[index]
-        quantity = parse_fraction(quantity_raw) if quantity_raw is not None else None
+    for index, ing in enumerate(ingredients):
+        ing = ing.split(', ')[0]  # Extract the main ingredient name
+        unit = units[index]
+        quantity = parse_fraction(quantities[index])
         
         if quantity is None or quantity == 0:
-            continue  # Skip if quantity is invalid or zero
+            continue  # Skip invalid or zero quantities
         
-        # Extract calories for the ingredient and calculate per unit
-        calories_of_ing = float(ast.literal_eval(row['nutr_per_ingredient'])[index]['nrg'])
-        unit_calories = calories_of_ing / quantity if quantity else 0  # Avoid division by zero
+        # Calculate calories per unit
+        calories_of_ing = float(nutr_info[index]['nrg'])
+        unit_calories = calories_of_ing / quantity if quantity else 0
         
-        # Store the ingredient, unit, and calories in sorted order
-        append_sorted(f'{ing}-{unit}-{str(unit_calories)}')
+        # Append to the sorted ingredient and unit lists
+        append_sorted(ing, unit, '{:.2f}'.format(unit_calories))
+
+def create_ingredient_element(ingredients, units, quantities):
+    """
+    Create a structured list of ingredients with units and quantities for a recipe row.
+    """
+    return [{'name': ingredient, 'unit': unit, 'quantity': quantity}
+                      for ingredient, unit, quantity in zip(ingredients, units, quantities)]
+
+# Initialize lists to store calculated data
+total_time_list = []
+calories_list = []
+protein_list = []
+fat_list = []
+sugar_list = []
+ingredients_list = []
+
+def process_apply(row):
+    """
+    Process a single row to extract total time, nutrients, and ingredients, and store them in lists.
+    """
+    index = row.name
+
+    # Parse ingredients, units, and nutrition data only once
+    instructions = ast.literal_eval(row['Instructions'])
+    ingredients = ast.literal_eval(row['Ingredients'])
+    units = ast.literal_eval(row['unit'])
+    quantities = ast.literal_eval(row['quantity'])
+    nutr_info = ast.literal_eval(row['nutr_per_ingredient'])
+
+    # Extract total time from instructions
+    total_time_list[index] = extract_total_time(instructions)
+
+    # Replace double quotes in recipe name
+    row['Name'].replace('"', '')
+
+    row['Instructions'] = instructions
+
+    # Parse and process ingredients
+    ing_parser(ingredients, units, quantities, nutr_info)
+
+    # Sum up nutrient values from `nutr_per_ingredient`
+    total_calories = total_protein = total_fat = total_sugar = 0
+
+    for nutr in nutr_info:
+        total_calories += nutr['nrg']
+        total_protein += nutr['pro']
+        total_fat += nutr['fat']
+        total_sugar += nutr['sug']
+
+    # Append calculated values to respective lists
+    calories_list[index] = round(total_calories, 2)
+    protein_list[index] = round(total_protein, 2)
+    fat_list[index] = round(total_fat, 2)
+    sugar_list[index] = round(total_sugar, 2)
+    ingredients_list[index] = create_ingredient_element(ingredients, units, quantities)
 
 def process_data(df):
     """
-    Process the recipe DataFrame by extracting total time, parsing ingredients, and calculating total calories.
+    Process the entire DataFrame by applying row-wise transformations.
     """
-    # Extract total cooking time based on the instructions in the recipe
-    df['Total Time'] = df.Instructions.apply(
-        lambda val: extract_total_time([normalize_text(instr) for instr in ast.literal_eval(val)])
-    )
-    
-    # Apply the ing_parser function to each row to process ingredients
-    df.apply(lambda row: ing_parser(row), axis=1)
-    
-    # Calculate total calories by summing the 'nrg' field for all ingredients
-    df['Calories'] = df.nutr_per_ingredient.apply(
-        lambda val: np.sum([nutr['nrg'] for nutr in ast.literal_eval(val)])
-    )
-    
-    # Return the DataFrame after dropping unnecessary columns
-    return df.drop(['nutr_values_per100g', 'fsa_lights_per100g'], axis=1)
+    length = df.shape[0]
 
-def main():
+    # Clear global lists before starting
+    global total_time_list, calories_list, protein_list, fat_list, sugar_list, ingredients_list
+    total_time_list = np.empty((length,), dtype=object)
+    calories_list = np.empty((length,), dtype=float)
+    protein_list = np.empty((length,), dtype=float)
+    fat_list = np.empty((length,), dtype=float)
+    sugar_list = np.empty((length,), dtype=float)
+    ingredients_list = np.empty((length,), dtype=object)
+
+    # Apply the process_apply function to each row
+    df.apply(process_apply, axis=1)
+
+    # Add the lists as new columns to the DataFrame
+    df['Total Time'] = total_time_list
+    df['Calories'] = calories_list
+    df['Protein'] = protein_list
+    df['Fat'] = fat_list
+    df['Sugar'] = sugar_list
+    df['ingredients'] = ingredients_list
+
+    # Drop unnecessary columns and return the processed DataFrame
+    return df.drop(['nutr_values_per100g', 'fsa_lights_per100g', 'weight_per_ingr',
+                    'Ingredients', 'unit', 'quantity', 'nutr_per_ingredient'], axis=1)
+
+def parser_main():
     """
-    Main function that processes recipe data from CSV files, applies the necessary transformations,
-    and saves the processed data along with a list of ingredients and their calories.
+    Main function to process all recipe data files and save the results.
     """
-    # Define the directory where the script is located
-    path_of_the_current_scripts_dir = '/'.join(os.path.abspath(__file__).split('\\')[:-1])
-    
-    # Define the input and output directories for the data
+    path_of_the_current_scripts_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir_path = os.path.join(path_of_the_current_scripts_dir, "partitioned_data")
     data_out_path = os.path.join(path_of_the_current_scripts_dir, "processed_data")
     
-    # Create the output directory if it doesn't exist
     os.makedirs(data_out_path, exist_ok=True)
-    
+
+    df_list = []
+
     # Loop through each CSV file in the input directory
     for file in os.listdir(data_dir_path):
-        # Read the recipe data from the CSV file
         df = pd.read_csv(os.path.join(data_dir_path, file))
-        
-        # Process the data and save the results to a new CSV file
-        process_data(df).to_csv(os.path.join(data_out_path, file), index=False)
-    
-    # Save the sorted ingredient-calories list to a NumPy binary file
-    np.save(os.path.join(data_out_path, 'ingredients_calories_table.npy'), np.asarray(sorted_ing_list))
+        df_list.append(process_data(df))
+
+    # Concatenate all DataFrames into one and save it as JSON
+    if df_list:
+        final_df = pd.concat(df_list, ignore_index=True)
+        json_data = final_df.to_dict(orient='records')
+
+        with open(os.path.join(data_out_path, 'final_recipes_data.json'), 'w') as json_file:
+            json.dump(json_data, json_file, indent=4)
+
+    # Save sorted ingredients and units to JSON files
+    with open(os.path.join(data_out_path, 'ingredients_calories_table.json'), 'w') as json_file:
+        json.dump(sorted_ing_list, json_file, indent=4)
+
+    with open(os.path.join(data_out_path, 'units_table.json'), 'w') as json_file:
+        json.dump(sorted_unit_list, json_file, indent=4)
 
 # Execute the main function when the script is run
 if __name__ == "__main__":
-    main()
+    import time
+    start_time = time.time()
+    parser_main()
+    print(f"Processing completed in {time.time() - start_time:.2f} seconds")
