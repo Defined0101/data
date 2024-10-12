@@ -164,17 +164,19 @@ def process_data(df):
     fat_list = np.empty((length,), dtype=float)
     sugar_list = np.empty((length,), dtype=float)
     ingredients_list = np.empty((length,), dtype=object)
+    desc_list = [''] * length
 
     # Apply the process_apply function to each row
     df.apply(process_apply, axis=1)
 
     # Add the lists as new columns to the DataFrame
-    df['Total Time'] = total_time_list
-    df['Calories'] = calories_list
-    df['Protein'] = protein_list
-    df['Fat'] = fat_list
+    df['total_time'] = total_time_list
+    df['calories'] = calories_list
+    df['protein'] = protein_list
+    df['fat'] = fat_list
     df['Sugar'] = sugar_list
     df['ingredients'] = ingredients_list
+    df['desc'] = desc_list
 
     # Drop unnecessary columns and return the processed DataFrame
     return df.drop(['nutr_values_per100g', 'fsa_lights_per100g', 'weight_per_ingr',
