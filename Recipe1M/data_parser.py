@@ -202,8 +202,13 @@ def parser_main():
         final_df = pd.concat(df_list, ignore_index=True)
         json_data = final_df.to_dict(orient='records')
 
+        # Save final DataFrame as JSON
         with open(os.path.join(data_out_path, 'final_recipes_data.json'), 'w') as json_file:
             json.dump(json_data, json_file, indent=4)
+
+        # Save final DataFrame as a Parquet file
+        parquet_file_path = os.path.join(data_out_path, 'final_recipes_data.parquet')
+        final_df.to_parquet(parquet_file_path, index=False, engine='pyarrow')  # or engine='fastparquet'
 
     # Save sorted ingredients and units to JSON files
     with open(os.path.join(data_out_path, 'ingredients_calories_table.json'), 'w') as json_file:
@@ -211,6 +216,7 @@ def parser_main():
 
     with open(os.path.join(data_out_path, 'units_table.json'), 'w') as json_file:
         json.dump(sorted_unit_list, json_file, indent=4)
+
 
 # Execute the main function when the script is run
 if __name__ == "__main__":
