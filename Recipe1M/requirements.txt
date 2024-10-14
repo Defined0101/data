@@ -1,0 +1,5 @@
+ijson
+pandas
+numpy
+pyarrow
+fastparquet
