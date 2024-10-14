@@ -161,10 +161,8 @@ def process_recipes(data):
         title = recipe.get('title')
         if title:
             title = normalize_text(title)
-            recipe_id = title
             name = title
         else:
-            recipe_id = 'Unknown'
             name = 'Unknown'
 
         instructions_list = recipe.get('directions', [])
@@ -201,7 +199,6 @@ def process_recipes(data):
             })
 
         recipes.append({
-            'recipe_id': recipe_id,
             'name': name,
             'instructions': instructions,
             'ingredients': ingredients,
