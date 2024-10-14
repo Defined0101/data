@@ -24,6 +24,8 @@ def normalize_text(text):
 
     text = text.replace('⁄', '/')
     text = re.sub(r'\s+', ' ', text)
+    # remove small, medium, large
+    text = re.sub(r'\b(?:small|medium|large)\b', '', text, flags=re.IGNORECASE)
     return text.strip()
 
 
@@ -61,7 +63,6 @@ def parse_ingredient(ingredient):
         'head', 'heads',
         'stalk', 'stalks',
         'piece', 'pieces',
-        'medium', 'large', 'small',
         'jar', 'jars',
         'bottle', 'bottles',
         'bag', 'bags',
