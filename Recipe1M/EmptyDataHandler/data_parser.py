@@ -41,6 +41,7 @@ def extract_total_time(directions):
     total_minutes = 0
     for step in directions:
         step = normalize_text(step)
+        # Find all occurrences of time units (minutes/hours) in the step
         matches = re.findall(r'(\d+)\s*(minutes?|hours?)', step, flags=re.IGNORECASE)
         
         for amount, unit in matches:
@@ -51,12 +52,16 @@ def extract_total_time(directions):
 
     return total_minutes if total_minutes > 0 else None
 
+# Pattern to match quantity, unit, and ingredient in the ingredient text
 quantity_unit_pattern = r"(?P<quantity>[\d/\.\s]+)\s*(?P<unit>[a-zA-Z\.]+)?\s*(?P<ingredient>.*)"
+# Pattern to remove unnecessary text in parentheses
 cleanup_pattern = r"\(.*?\)"
+# Pattern to handle numeric ranges, e.g., "1/4 to 1/2"
 numeric_range_pattern = r"\b(\d+/\d+|\d+(\.\d+)?)\s*to\s*(\d+/\d+|\d+(\.\d+)?)\b"
+# Pattern to convert plural forms to singular
 plural_pattern = r"\b([a-zA-Z]+)s\b"
 
-# Birim kısaltmalarını tam isimlerine çevirmek için bir sözlük oluşturuyoruz
+# Dictionary to convert unit abbreviations to full names
 unit_expansions = {
     "tbsp": "tablespoon",
     "tsp": "teaspoon",
@@ -71,35 +76,41 @@ unit_expansions = {
     "leaves": "leaf"
 }
 
+# List of known units
 known_units = [
     "bushel", "cup", "dash", "drop", "fl. oz", "g", "gallon", "glass", "kg", "liter", "ml", "ounce", "pinch", "pint", "pound", "quart", "scoop", "shot", "tablespoon", "teaspoon", "leaf"
 ]
 
 def expand_unit(unit):
-    # Birim kısaltmalarını tam isimlerine çeviriyoruz
+    """
+    Convert unit abbreviations to full names.
+    """
     return unit_expansions.get(unit, unit)
 
 def parse_ingredient(ingredient_text):
-    # Gereksiz parantez içi açıklamaları kaldırıyoruz
+    """
+    Parse an ingredient string to extract quantity, unit, and ingredient name.
+    """
+    # Remove unnecessary parenthetical information
     cleaned_text = re.sub(cleanup_pattern, "", ingredient_text).strip()
-    # Miktar aralıklarını ele alıyoruz, örneğin '1/4 to 1/2' ifadesini '1/4' olarak alıyoruz
+    # Handle numeric ranges by taking the lower bound
     cleaned_text = re.sub(numeric_range_pattern, lambda m: m.group(1), cleaned_text).strip()
     match = re.match(quantity_unit_pattern, cleaned_text)
     if match:
         quantity = match.group('quantity').strip() if match.group('quantity') else ''
-        unit = match.group('unit').replace('.', '').strip() if match.group('unit') else ''  # Birim içindeki noktayı kaldırıyoruz
-        # Birimleri genişletiyoruz (kısaltmadan tam hale getiriyoruz)
+        unit = match.group('unit').replace('.', '').strip() if match.group('unit') else ''  # Remove periods from unit
+        # Expand units to their full names
         unit = expand_unit(unit)
-        # Birimleri tekil hale getiriyoruz
+        # Convert plural units to singular
         unit = re.sub(plural_pattern, r"\1", unit).strip()
         ingredient = match.group('ingredient').strip() if match.group('ingredient') else ''
-        # 'or' ile ayrılmış alternatifleri temizleyerek ayırıyoruz
-        ingredient = re.sub(r"\b\d+(/\d+)?\b", "", ingredient).strip()  # Sayısal ifadeleri kaldırıyoruz
-        ingredient = re.sub(r",.*", "", ingredient).strip()  # Virgülden sonrasını temizliyoruz
-        ingredient = re.sub(r" or ", "/", ingredient)  # 'or' ifadelerini '/' ile değiştiriyoruz
+        # Clean up ingredient alternatives and remove numerical references
+        ingredient = re.sub(r"\b\d+(/\d+)?\b", "", ingredient).strip()  # Remove numeric references
+        ingredient = re.sub(r",.*", "", ingredient).strip()  # Remove text after commas
+        ingredient = re.sub(r" or ", "/", ingredient)  # Replace "or" with "/" to handle alternatives
         if unit:
-            ingredient = re.sub(rf"\b{unit}\b", "", ingredient).strip()  # Ingredient içindeki birimi kaldırıyoruz
-        ingredient = re.sub(plural_pattern, r"\1", ingredient).strip()  # Çoğul ifadeleri tekil hale getiriyoruz
+            ingredient = re.sub(rf"\b{unit}\b", "", ingredient).strip()  # Remove the unit from ingredient name
+        ingredient = re.sub(plural_pattern, r"\1", ingredient).strip()  # Convert plurals to singular
         if not ingredient and unit:
             return quantity, 'piece', unit
         if not ingredient:
@@ -111,6 +122,9 @@ def parse_ingredient(ingredient_text):
     return None, None, ingredient_text
 
 def get_nutr(ingredient, unit, quantity=1):
+    """
+    Get nutritional information (calories, protein, fat, sugar) for a given ingredient.
+    """
     try:
         # Find matching ingredient if exact match is not found
         matching_ingredients = [key for key in calorie_lookup if ingredient.lower() in key.lower()]
@@ -136,7 +150,7 @@ def process_apply(row):
     """
     index = row.name
 
-    # Parse ingredients, units, and nutrition data only once
+    # Parse ingredients, units, and nutrition data
     instructions = ast.literal_eval(row['Instructions'])
     ingredients = ast.literal_eval(row['Ingredients'])
 
@@ -214,9 +228,11 @@ def parser_main():
 
     global ing_cal_list
 
+    # Load the calorie lookup table from a JSON file
     with open(os.path.join(path_of_the_current_scripts_dir, '../processed_data', 'ingredients_calories_table.json'), 'r') as ing_cal_json:
         ing_cal_list = json.load(ing_cal_json)
     
+    # Populate the calorie lookup dictionary
     for entry in ing_cal_list:
         ingredient, unit, calories, protein, fat, sugar = entry.split("|")
         if ingredient not in calorie_lookup:
@@ -228,7 +244,7 @@ def parser_main():
             float(sugar),
         ]
 
-    # Process files in batches of 4
+    # Process files in batches of 8
     all_files = os.listdir(data_dir_path)
     batch_size = 8
     for i in range(0, len(all_files), batch_size):
@@ -249,6 +265,7 @@ def parser_main():
             with open(os.path.join(data_out_path, f'processed_batch_{i // batch_size + 1}.json'), 'w') as json_file:
                 json.dump(batch_df.to_dict(orient='records'), json_file, indent=4)
 
+            # Save final DataFrame as a Parquet file
             output_file_path = os.path.join(data_out_path, f'processed_batch_{i // batch_size + 1}.parquet')
             batch_df.to_parquet(output_file_path, index=False, engine='pyarrow')
 
@@ -258,4 +275,3 @@ if __name__ == "__main__":
     start_time = time.time()
     parser_main()
     print(f"Processing completed in {time.time() - start_time:.2f} seconds")
-    
