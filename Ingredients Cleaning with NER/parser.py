@@ -1,21 +1,36 @@
 import re
 import json
+import ast
 import pandas as pd
 
 def clean_prediction(prediction):
+    """
+    Prediction string'ini Python literal'ına çevirip geçerli JSON formatına dönüştürür.
+    Bu sayede, prediction içindeki tek tırnak (') karakterleri değerlerin bir parçası olarak korunur.
+    """
     try:
-        prediction = prediction.replace("'", "\"")
-        prediction = re.sub(r'}\s*{', '},{', prediction)
-        if not prediction.startswith("[") and not prediction.endswith("]"):
-            prediction = f"[{prediction}]"
-        json.loads(prediction)  
-        return prediction
+        # Önce prediction string'ini doğrudan Python literal'ı olarak değerlendirmeye çalışalım.
+        parsed = ast.literal_eval(prediction)
+        # Eğer tek bir sözlükse, listeye alalım.
+        if not isinstance(parsed, list):
+            parsed = [parsed]
+        return json.dumps(parsed)
     except Exception:
-        return None
+        try:
+            # Eğer direkt değerlendirme başarısız olursa, arka arkaya gelen sözlükler arasında virgül ekleyelim.
+            fixed = re.sub(r'}\s*{', '},{', prediction)
+            if not fixed.startswith("["):
+                fixed = "[" + fixed + "]"
+            parsed = ast.literal_eval(fixed)
+            if not isinstance(parsed, list):
+                parsed = [parsed]
+            return json.dumps(parsed)
+        except Exception:
+            return None
 
 def parse_i_name_tokens_pandas(input_csv, output_csv, error_csv):
-    df = pd.read_csv(input_csv, sep="\t", dtype=str)  
-    df = df.fillna('')  
+    df = pd.read_csv(input_csv, sep="\t", dtype=str)
+    df = df.fillna('')
 
     df["I-NAME tokens"] = ""
     df["error"] = ""
@@ -29,12 +44,12 @@ def parse_i_name_tokens_pandas(input_csv, output_csv, error_csv):
         index_level = row.get("__index_level_0__", "").strip()
         prediction = row.get("prediction", "").strip()
 
-        i_name_tokens = []  
+        i_name_tokens = []
 
         try:
             if prediction:
                 cleaned_prediction = clean_prediction(prediction)
-                if cleaned_prediction:  
+                if cleaned_prediction:
                     parsed_list = json.loads(cleaned_prediction)
                     for token_dict in parsed_list:
                         if isinstance(token_dict, dict) and token_dict.get('entity') == 'I-NAME':
@@ -52,7 +67,7 @@ def parse_i_name_tokens_pandas(input_csv, output_csv, error_csv):
                 "prediction": prediction,
                 "error": str(e)
             })
-            continue  
+            continue
 
         success_rows.append({
             "Ingredient": ingredient,
@@ -62,7 +77,7 @@ def parse_i_name_tokens_pandas(input_csv, output_csv, error_csv):
         })
 
     success_df = pd.DataFrame(success_rows)
-    success_df.to_csv(output_csv,sep="\t", index=False, encoding="utf-8")
+    success_df.to_csv(output_csv, sep="\t", index=False, encoding="utf-8")
 
     error_df = pd.DataFrame(error_rows)
     error_df.to_csv(error_csv, index=False, encoding="utf-8")
